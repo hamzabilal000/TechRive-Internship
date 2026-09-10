@@ -1,0 +1,211 @@
+{
+  "name": "TechRive Support Triage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-triage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-intake",
+      "name": "Webhook - Ticket Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "support-triage"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/triage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $json.body.message }) }}",
+        "options": {}
+      },
+      "id": "http-call-triage",
+      "name": "Call Week 5 Triage Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-priority-high",
+              "leftValue": "={{ $json.priority }}",
+              "rightValue": "high",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-high-priority",
+      "name": "IF High Priority",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "action",
+              "type": "string",
+              "value": "escalate_to_human"
+            },
+            {
+              "id": "a2",
+              "name": "queue",
+              "type": "string",
+              "value": "={{ $json.category }}-urgent"
+            },
+            {
+              "id": "a3",
+              "name": "note",
+              "type": "string",
+              "value": "High-priority ticket routed to a human agent."
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "set-escalate",
+      "name": "Escalate to Human Agent",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [960, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "action",
+              "type": "string",
+              "value": "auto_reply"
+            },
+            {
+              "id": "b2",
+              "name": "reply",
+              "type": "string",
+              "value": "={{ $json.suggested_reply }}"
+            },
+            {
+              "id": "b3",
+              "name": "queue",
+              "type": "string",
+              "value": "={{ $json.category }}-standard"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "set-autoreply",
+      "name": "Auto-Reply to Customer",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [960, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Ticket Intake": {
+      "main": [
+        [
+          {
+            "node": "Call Week 5 Triage Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Week 5 Triage Service": {
+      "main": [
+        [
+          {
+            "node": "IF High Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF High Priority": {
+      "main": [
+        [
+          {
+            "node": "Escalate to Human Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auto-Reply to Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate to Human Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-Reply to Customer": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "description": "Receives a support message via webhook, calls the Week 5 LangChain triage service, and branches on the returned priority: high-priority tickets are escalated to a human agent, normal-priority tickets get an auto-reply using the KB-grounded suggested reply."
+  }
+}
